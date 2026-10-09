@@ -19,8 +19,6 @@ const copy = {
     ugc: 'UGC Review',
     posters: 'Poster Posting',
     settings: 'Settings',
-    hello: 'Good morning, Shelly',
-    subtitle: 'Keep every campus action visible, verified, and ready to report.',
     week: 'Week 1 · Oct 06–12, 2026',
     addRecord: 'Add record',
     export: 'Export report',
@@ -85,8 +83,6 @@ const copy = {
     ugc: 'UGC 审核',
     posters: '海报张贴',
     settings: '设置',
-    hello: '早上好，Shelly',
-    subtitle: '让每项校园工作可见、可核验、可直接汇报。',
     week: '第 1 周 · 2026 年 10 月 06–12 日',
     addRecord: '新增记录',
     export: '导出报告',
@@ -229,7 +225,7 @@ function overviewView() {
     ...state.data.ugc.map((item) => ({ ...item, kind: 'ugc', label: item.topic, detail: item.platform })),
     ...state.data.posters.map((item) => ({ ...item, kind: 'poster', label: item.location, detail: `${item.count} posters` })),
   ].sort((a, b) => b.id - a.id).slice(0, 6);
-  return `<div class="page-head"><div><p class="kicker">${t('thisWeek')} / 2026</p><h1>${t('hello')}</h1><p class="subhead">${t('subtitle')}</p></div><div class="head-actions"><button class="button secondary" data-export>${t('export')} <span>↗</span></button><button class="button primary" data-add>${t('addRecord')} <span>＋</span></button></div></div>
+  return `<div class="page-head"><div><p class="kicker">${t('thisWeek')} / 2026</p><h1>${t('overview')}</h1></div><div class="head-actions"><button class="button secondary" data-export>${t('export')} <span>↗</span></button><button class="button primary" data-add>${t('addRecord')} <span>＋</span></button></div></div>
     <div class="week-bar"><div><span class="calendar-icon">□</span><strong>${t('week')}</strong></div><span class="week-status"><i></i>${total.pending} ${t('pending')}</span></div>
     <div class="metrics-grid">
       ${metricCard('approvedHours', `${total.workHours + total.ugcHours}h`, '+0h', '◷', 'lilac')}

@@ -1,18 +1,30 @@
 import './style.css';
 
-const ambassadors = [
-  { name: 'Shelly', role: 'Lead', rate: 22, initials: 'S' },
-  { name: 'Ada', role: 'Regular Ambassador', rate: 18, initials: 'A' },
-  { name: 'Harrison', role: 'Regular Ambassador', rate: 18, initials: 'H' },
-  { name: 'Karim', role: 'Regular Ambassador', rate: 18, initials: 'K' },
-  { name: 'Xinyi', role: 'Regular Ambassador', rate: 18, initials: 'X' },
-  { name: 'Rhea', role: 'Regular Ambassador', rate: 18, initials: 'R' },
-  { name: 'Abby', role: 'Regular Ambassador', rate: 18, initials: 'A' },
-];
+const schools = {
+  nyu: {
+    name: 'NYU',
+    members: [
+      ['Shelly', 'Lead'], ['Ada', 'Regular Ambassador'], ['Harrison', 'Regular Ambassador'],
+      ['Karim', 'Regular Ambassador'], ['Xinyi', 'Regular Ambassador'], ['Rhea', 'Regular Ambassador'],
+      ['Abby', 'Regular Ambassador'], ['Kley', 'Regular Ambassador'], ['Sallie', 'Regular Ambassador'],
+      ['Lydia', 'Regular Ambassador'],
+    ],
+  },
+  columbia: { name: 'Columbia', members: [['Alex', 'Lead'], ['Melody', 'Regular Ambassador'], ['Cindy', 'Regular Ambassador'], ['Michelle', 'Regular Ambassador']] },
+  barnard: { name: 'Barnard', members: [['Samra', 'Lead'], ['Maria', 'Regular Ambassador']] },
+  parsons: { name: 'Parsons', members: [] },
+  fta: { name: 'FTA', members: [] },
+  sva: { name: 'SVA', members: [] },
+  cornellTech: { name: 'Cornell Tech', members: [] },
+};
+
+const schoolMembers = (schoolId) => (schools[schoolId]?.members || []).map(([name, role]) => ({ name, role, rate: role === 'Lead' ? 22 : 18, initials: name[0] }));
+const members = () => schoolMembers(state.schoolId);
+const currentSchool = () => schools[state.schoolId];
 
 const copy = {
   en: {
-    brand: 'NYU Ambassador Ops',
+    brand: 'Campus Ambassador Ops',
     eyebrow: 'Campus growth workspace',
     overview: 'Overview',
     work: 'Weekly Work',
@@ -71,12 +83,13 @@ const copy = {
     postersUnit: 'per poster',
     bilingual: '中文',
     language: 'Language',
+    school: 'School',
     reset: 'Reset demo data',
     resetConfirm: 'Reset all local records to the starter demo data?',
     saved: 'Saved locally',
   },
   zh: {
-    brand: 'NYU 校园大使工作台',
+    brand: '校园大使工作台',
     eyebrow: '校园增长协作空间',
     overview: '总览',
     work: '每周工作',
@@ -135,19 +148,31 @@ const copy = {
     postersUnit: '每张',
     bilingual: 'EN',
     language: '语言',
+    school: '学校',
     reset: '重置演示数据',
     resetConfirm: '确定要把所有本地记录重置为演示数据吗？',
     saved: '已保存到本地',
   },
 };
 
-const starterData = { works: [], ugc: [], posters: [], referrals: [] };
+const starterData = () => ({ works: [], ugc: [], posters: [], referrals: [] });
+
+function loadWorkspace() {
+  const stored = JSON.parse(localStorage.getItem('nyu-ambassador-data-v2') || 'null');
+  if (!stored) return { schoolId: 'nyu', dataBySchool: { nyu: starterData() } };
+  if (stored.works || stored.ugc || stored.posters || stored.referrals) return { schoolId: 'nyu', dataBySchool: { nyu: stored } };
+  return { schoolId: stored.schoolId || 'nyu', dataBySchool: stored.dataBySchool || { nyu: starterData() } };
+}
+
+const workspace = loadWorkspace();
 
 let state = {
   language: localStorage.getItem('nyu-language') || 'en',
   activeView: 'overview',
   filter: 'All',
-  data: JSON.parse(localStorage.getItem('nyu-ambassador-data-v2') || 'null') || starterData,
+  schoolId: schools[workspace.schoolId] ? workspace.schoolId : 'nyu',
+  dataBySchool: workspace.dataBySchool,
+  data: workspace.dataBySchool[schools[workspace.schoolId] ? workspace.schoolId : 'nyu'] || starterData(),
 };
 
 const app = document.querySelector('#app');
@@ -155,8 +180,19 @@ const t = (key) => copy[state.language][key] || key;
 const dateLabel = (value) => new Date(`${value}T12:00:00`).toLocaleDateString(state.language === 'zh' ? 'zh-CN' : 'en-US', { month: 'short', day: 'numeric' });
 
 function persist() {
-  localStorage.setItem('nyu-ambassador-data-v2', JSON.stringify(state.data));
+  state.dataBySchool[state.schoolId] = state.data;
+  localStorage.setItem('nyu-ambassador-data-v2', JSON.stringify({ schoolId: state.schoolId, dataBySchool: state.dataBySchool }));
   localStorage.setItem('nyu-language', state.language);
+}
+
+function switchSchool(schoolId) {
+  if (!schools[schoolId] || schoolId === state.schoolId) return;
+  state.dataBySchool[state.schoolId] = state.data;
+  state.schoolId = schoolId;
+  state.data = state.dataBySchool[schoolId] || starterData();
+  state.filter = 'All';
+  persist();
+  render();
 }
 
 function totals() {
@@ -193,7 +229,7 @@ function renderShell(content) {
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark">N</span><div><strong>${t('brand')}</strong><small>${t('eyebrow')}</small></div></div>
-        <div class="workspace-switch"><span class="workspace-dot"></span><span>NYU Campus Team</span><span class="chevron">⌄</span></div>
+        <div class="workspace-switch"><span class="workspace-dot"></span><select class="school-select" data-school-select aria-label="${t('school')}">${Object.entries(schools).map(([id, school]) => `<option value="${id}" ${state.schoolId === id ? 'selected' : ''}>${school.name}</option>`).join('')}</select><span class="chevron">⌄</span></div>
         <nav class="nav-group">
           <div class="nav-label">${t('overview')}</div>
           ${navItem('overview', '◒', t('overview'))}
@@ -231,9 +267,9 @@ function overviewView() {
       ${metricCard('approvedHours', `${total.workHours + total.ugcHours}h`, '+0h', '◷', 'lilac')}
       ${metricCard('ugcPublished', total.ugcPublished, `${state.data.ugc.length} total`, '▶', 'peach')}
       ${metricCard('postersDone', total.posters, `${state.data.posters.length} records`, '▤', 'blue')}
-      ${metricCard('teamMembers', ambassadors.length, 'NYU', '◎', 'mint')}
+      ${metricCard('teamMembers', members().length, currentSchool().name, '◎', 'mint')}
     </div>
-    <div class="dashboard-grid"><section class="panel activity-panel"><div class="panel-head"><div><h2>${t('recentActivity')}</h2><p>${t('activitySub')}</p></div><button class="text-button" data-view="work">${t('review')} <span>→</span></button></div><div class="activity-list">${recent.map(activityRow).join('') || emptyState()}</div></section><section class="panel team-panel"><div class="panel-head"><div><h2>${t('teamSnapshot')}</h2><p>${t('teamSub')}</p></div></div><div class="team-list">${ambassadors.map(teamRow).join('')}</div></section></div>`;
+    <div class="dashboard-grid"><section class="panel activity-panel"><div class="panel-head"><div><h2>${t('recentActivity')}</h2><p>${t('activitySub')}</p></div><button class="text-button" data-view="work">${t('review')} <span>→</span></button></div><div class="activity-list">${recent.map(activityRow).join('') || emptyState()}</div></section><section class="panel team-panel"><div class="panel-head"><div><h2>${t('teamSnapshot')}</h2><p>${t('teamSub')}</p></div></div><div class="team-list">${members().map(teamRow).join('')}</div></section></div>`;
 }
 
 function metricCard(label, value, trend, icon, tone) {
@@ -286,7 +322,7 @@ function renderDynamicFields() {
   const type = document.querySelector('#record-type').value;
   const root = document.querySelector('#dynamic-fields');
   if (!type) { root.innerHTML = ''; return; }
-  root.innerHTML = `<label>${t('name')}<select name="name" required>${ambassadors.map((person) => `<option>${person.name}</option>`).join('')}</select></label><div class="form-grid">${type === 'work' ? `<label>${t('task')}<select name="task"><option>Ground Promotion</option><option>Community Operations</option><option>Internal Coordination</option><option>Other Execution</option></select></label><label>${t('hours')}<input name="hours" type="number" min="0" step="0.25" value="1" required /></label><label class="span-2">${t('description')}<input name="description" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label>${t('verification')}<select name="status"><option>Pending Verification</option><option>Approved</option><option>Rejected</option></select></label>` : type === 'ugc' ? `<label>${t('platform')}<select name="platform"><option>TikTok</option><option>Instagram Reels</option></select></label><label>${t('hours')}<input name="hours" type="number" min="0" step="0.25" value="1.5" required /></label><label class="span-2">${state.language === 'en' ? 'Video topic' : '视频主题'}<input name="topic" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label class="span-2">${t('reviewStatus')}<select name="status"><option>Pending Review</option><option>Approved</option><option>Rejected</option><option>Officially Posted</option></select></label>` : type === 'posters' ? `<label>${t('location')}<input name="location" required /></label><label>${t('count')}<input name="count" type="number" min="1" step="1" value="2" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label class="span-2">${t('verification')}<select name="status"><option>Pending Verification</option><option>Approved</option><option>Rejected</option></select></label>` : `<label>${t('referralCount')}<input name="count" type="number" min="1" step="1" value="1" required /></label><label>${t('verification')}<select name="status"><option>Approved</option><option>Pending Verification</option><option>Rejected</option></select></label>`}</div><input type="hidden" name="date" value="2026-10-10" />`;
+  root.innerHTML = `<label>${t('name')}<select name="name" required>${members().map((person) => `<option>${person.name}</option>`).join('')}</select></label><div class="form-grid">${type === 'work' ? `<label>${t('task')}<select name="task"><option>Ground Promotion</option><option>Community Operations</option><option>Internal Coordination</option><option>Other Execution</option></select></label><label>${t('hours')}<input name="hours" type="number" min="0" step="0.25" value="1" required /></label><label class="span-2">${t('description')}<input name="description" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label>${t('verification')}<select name="status"><option>Pending Verification</option><option>Approved</option><option>Rejected</option></select></label>` : type === 'ugc' ? `<label>${t('platform')}<select name="platform"><option>TikTok</option><option>Instagram Reels</option></select></label><label>${t('hours')}<input name="hours" type="number" min="0" step="0.25" value="1.5" required /></label><label class="span-2">${state.language === 'en' ? 'Video topic' : '视频主题'}<input name="topic" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label class="span-2">${t('reviewStatus')}<select name="status"><option>Pending Review</option><option>Approved</option><option>Rejected</option><option>Officially Posted</option></select></label>` : type === 'posters' ? `<label>${t('location')}<input name="location" required /></label><label>${t('count')}<input name="count" type="number" min="1" step="1" value="2" required /></label><label class="span-2">${t('link')}<input name="link" type="url" placeholder="https://..." /></label><label class="span-2">${t('verification')}<select name="status"><option>Pending Verification</option><option>Approved</option><option>Rejected</option></select></label>` : `<label>${t('referralCount')}<input name="count" type="number" min="1" step="1" value="1" required /></label><label>${t('verification')}<select name="status"><option>Approved</option><option>Pending Verification</option><option>Rejected</option></select></label>`}</div><input type="hidden" name="date" value="2026-10-10" />`;
 }
 
 function saveRecord(event) {
@@ -320,6 +356,7 @@ function bindShellEvents() {
   document.querySelectorAll('[data-add]').forEach((element) => element.addEventListener('click', openModal));
   document.querySelectorAll('[data-export]').forEach((element) => element.addEventListener('click', exportReport));
   document.querySelectorAll('[data-filter]').forEach((element) => element.addEventListener('click', () => { state.filter = element.dataset.filter; render(); }));
+  document.querySelectorAll('[data-school-select]').forEach((element) => element.addEventListener('change', () => switchSchool(element.value)));
 }
 
 function render() { renderShell(state.activeView === 'overview' ? overviewView() : tableView(state.activeView)); }

@@ -1,4 +1,5 @@
 import './style.css';
+import { supabase, supabaseConfigured } from './supabase';
 
 const schools = {
   nyu: {
@@ -92,6 +93,9 @@ const copy = {
     deleteConfirm: 'Delete this record? This cannot be undone.',
     notOwnerDelete: 'Only the submitter can delete this record in local mode.',
     localOnlyNotice: 'Records are currently saved in this browser only. Shared access needs a connected database.',
+    signIn: 'Sign in',
+    signOut: 'Sign out',
+    authRequired: 'Sign in to use shared school data.',
   },
   zh: {
     brand: '校园大使工作台',
@@ -162,6 +166,9 @@ const copy = {
     deleteConfirm: '确定删除这条记录吗？删除后无法恢复。',
     notOwnerDelete: '本地模式下只有提交人可以删除这条记录。',
     localOnlyNotice: '当前记录只保存在本浏览器中。要让所有大使共享，需要接入共享数据库。',
+    signIn: '登录',
+    signOut: '退出登录',
+    authRequired: '请登录后使用共享学校数据。',
   },
 };
 
@@ -185,6 +192,8 @@ let state = {
   schoolId: schools[workspace.schoolId] ? workspace.schoolId : 'nyu',
   dataBySchool: workspace.dataBySchool,
   data: workspace.dataBySchool[schools[workspace.schoolId] ? workspace.schoolId : 'nyu'] || starterData(),
+  session: null,
+  profile: null,
 };
 
 const app = document.querySelector('#app');
@@ -195,6 +204,42 @@ function persist() {
   state.dataBySchool[state.schoolId] = state.data;
   localStorage.setItem('nyu-ambassador-data-v2', JSON.stringify({ schoolId: state.schoolId, dataBySchool: state.dataBySchool }));
   localStorage.setItem('nyu-language', state.language);
+}
+
+async function hydrateRemoteWorkspace() {
+  if (!supabaseConfigured) return;
+  const { data: { session } } = await supabase.auth.getSession();
+  state.session = session;
+  if (!session) return;
+  const { data: profile, error: profileError } = await supabase.from('profiles').select('id, display_name, school_id, role').eq('id', session.user.id).single();
+  if (profileError) throw profileError;
+  state.profile = profile;
+  state.schoolId = profile.school_id;
+  const { data: records, error } = await supabase.from('records').select('*').eq('school_id', profile.school_id).order('created_at', { ascending: false });
+  if (error) throw error;
+  state.data = starterData();
+  records.forEach((record) => {
+    const status = { approved: 'Approved', rejected: 'Rejected', posted: 'Officially Posted', pending: record.record_type === 'ugc' ? 'Pending Review' : 'Pending Verification' }[record.status] || 'Pending Verification';
+    const item = { id: record.id, submittedBy: record.submitted_by, status, ...record.payload };
+    const collection = record.record_type === 'work' ? 'works' : record.record_type === 'ugc' ? 'ugc' : record.record_type === 'poster' ? 'posters' : 'referrals';
+    state.data[collection].push(item);
+  });
+  state.dataBySchool[state.schoolId] = state.data;
+}
+
+async function signIn() {
+  const email = window.prompt(state.language === 'en' ? 'Enter your email to receive a sign-in link:' : '输入邮箱以接收登录链接：');
+  if (!email) return;
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+  if (error) showToast(error.message);
+  else showToast(state.language === 'en' ? 'Check your email for the sign-in link.' : '请检查邮箱中的登录链接。');
+}
+
+async function signOut() {
+  await supabase.auth.signOut();
+  state.session = null;
+  state.profile = null;
+  render();
 }
 
 function switchSchool(schoolId) {
@@ -237,6 +282,8 @@ function navItem(view, icon, label) {
 
 function renderShell(content) {
   const total = totals();
+  const authAction = supabaseConfigured ? (state.session ? `<button class="button secondary auth-button" data-sign-out>${t('signOut')}</button>` : `<button class="button secondary auth-button" data-sign-in>${t('signIn')}</button>`) : '';
+  const notice = supabaseConfigured ? (state.session ? '' : `<div class="local-only-notice">◌ ${t('authRequired')}</div>`) : `<div class="local-only-notice">◌ ${t('localOnlyNotice')}</div>`;
   app.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
@@ -257,8 +304,8 @@ function renderShell(content) {
         </div>
       </aside>
       <main class="main-content">
-        <header class="topbar"><div class="mobile-brand"><span class="brand-mark">N</span><strong>${t('brand')}</strong></div><div class="top-actions"><span class="save-state">● ${t('saved')}</span><button class="icon-button" title="Notifications">♢<span class="notification-dot"></span></button><button class="language-toggle" data-language="${state.language === 'en' ? 'zh' : 'en'}">${state.language === 'en' ? '中文' : 'English'}</button></div></header>
-        <section class="page-wrap"><div class="local-only-notice">◌ ${t('localOnlyNotice')}</div>${content}</section>
+        <header class="topbar"><div class="mobile-brand"><span class="brand-mark">N</span><strong>${t('brand')}</strong></div><div class="top-actions"><span class="save-state">● ${t('saved')}</span>${authAction}<button class="icon-button" title="Notifications">♢<span class="notification-dot"></span></button><button class="language-toggle" data-language="${state.language === 'en' ? 'zh' : 'en'}">${state.language === 'en' ? '中文' : 'English'}</button></div></header>
+        <section class="page-wrap">${notice}${content}</section>
       </main>
       <div class="toast" id="toast"></div>
       <div id="modal-root"></div>
@@ -326,6 +373,7 @@ function tableRow(item, view) {
 function emptyState() { return `<div class="empty-state"><span>✦</span><p>${t('noRecords')}</p></div>`; }
 
 function openModal() {
+  if (supabaseConfigured && !state.session) { showToast(t('authRequired')); return; }
   document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-close-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head"><div><p class="kicker">${t('thisWeek')}</p><h2 id="modal-title">${t('addRecord')}</h2></div><button class="icon-button" data-close-modal>×</button></div><form id="record-form"><label>${t('type')}<select name="type" id="record-type" required><option value="">${t('selectType')}</option><option value="work">${t('weeklyWork')}</option><option value="ugc">${t('ugcVideo')}</option><option value="posters">${t('posterRecord')}</option><option value="referral">${t('referral')}</option></select></label><div id="dynamic-fields"></div><button class="button primary full" type="submit">${t('save')} <span>→</span></button></form></section></div>`;
   document.querySelector('[name="type"]').addEventListener('change', renderDynamicFields);
   document.querySelector('#record-form').addEventListener('submit', saveRecord);
@@ -347,19 +395,36 @@ function saveRecord(event) {
   if (data.type === 'ugc') state.data.ugc.push({ ...item, hours: Number(data.hours) });
   if (data.type === 'posters') state.data.posters.push({ ...item, count: Number(data.count) });
   if (data.type === 'referral') state.data.referrals.push({ ...item, count: Number(data.count) });
+  if (supabaseConfigured && state.session) {
+    const recordType = data.type === 'posters' ? 'poster' : data.type;
+    const { type, ...payload } = data;
+    supabase.from('records').insert({ school_id: state.profile.school_id, submitted_by: state.session.user.id, record_type: recordType, status: statusToDb(data.status), payload: { ...payload, id: item.id, submittedBy: state.session.user.id } }).then(({ error }) => {
+      if (error) showToast(error.message);
+    });
+  }
   persist(); closeModal(); render(); showToast(t('saved'));
 }
 
 function closeModal() { document.querySelector('#modal-root').innerHTML = ''; }
 function showToast(message) { const toast = document.querySelector('#toast'); if (!toast) return; toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
 
-function canDelete(item) { return item.submittedBy === localActorId; }
+function canDelete(item) {
+  if (supabaseConfigured && state.session) return item.submittedBy === state.session.user.id || ['lead', 'admin'].includes(state.profile?.role);
+  return item.submittedBy === localActorId;
+}
+
+function statusToDb(status) {
+  return { Approved: 'approved', Rejected: 'rejected', 'Officially Posted': 'posted', 'Pending Review': 'pending', 'Pending Verification': 'pending' }[status] || 'pending';
+}
 
 function deleteRecord(kind, id) {
   if (!window.confirm(t('deleteConfirm'))) return;
   const collection = kind === 'work' ? 'works' : kind === 'ugc' ? 'ugc' : kind === 'poster' || kind === 'posters' ? 'posters' : 'referrals';
   const item = state.data[collection].find((record) => String(record.id) === String(id));
   if (!item || !canDelete(item)) { showToast(t('notOwnerDelete')); return; }
+  if (supabaseConfigured && state.session) {
+    supabase.from('records').delete().eq('id', id).then(({ error }) => { if (error) showToast(error.message); });
+  }
   state.data[collection] = state.data[collection].filter((item) => String(item.id) !== String(id));
   persist();
   render();
@@ -385,8 +450,20 @@ function bindShellEvents() {
   document.querySelectorAll('[data-filter]').forEach((element) => element.addEventListener('click', () => { state.filter = element.dataset.filter; render(); }));
   document.querySelectorAll('[data-school-select]').forEach((element) => element.addEventListener('change', () => switchSchool(element.value)));
   document.querySelectorAll('[data-delete-record]').forEach((element) => element.addEventListener('click', () => deleteRecord(element.dataset.kind, element.dataset.id)));
+  document.querySelectorAll('[data-sign-in]').forEach((element) => element.addEventListener('click', signIn));
+  document.querySelectorAll('[data-sign-out]').forEach((element) => element.addEventListener('click', signOut));
 }
 
 function render() { renderShell(state.activeView === 'overview' ? overviewView() : tableView(state.activeView)); }
 
-render();
+if (supabaseConfigured) {
+  app.innerHTML = `<div class="loading-screen">${copy[state.language].brand}…</div>`;
+  hydrateRemoteWorkspace().then(() => render()).catch((error) => {
+    console.error(error);
+    showToast(error.message);
+    render();
+  });
+  supabase.auth.onAuthStateChange(() => hydrateRemoteWorkspace().then(render).catch(console.error));
+} else {
+  render();
+}

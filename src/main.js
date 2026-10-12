@@ -87,6 +87,10 @@ const copy = {
     reset: 'Reset demo data',
     resetConfirm: 'Reset all local records to the starter demo data?',
     saved: 'Saved locally',
+    sharedWorkspace: 'Shared ambassador workspace',
+    delete: 'Delete',
+    deleteConfirm: 'Delete this record? This cannot be undone.',
+    localOnlyNotice: 'Records are currently saved in this browser only. Shared access needs a connected database.',
   },
   zh: {
     brand: '校园大使工作台',
@@ -152,6 +156,10 @@ const copy = {
     reset: '重置演示数据',
     resetConfirm: '确定要把所有本地记录重置为演示数据吗？',
     saved: '已保存到本地',
+    sharedWorkspace: '共享大使工作区',
+    delete: '删除',
+    deleteConfirm: '确定删除这条记录吗？删除后无法恢复。',
+    localOnlyNotice: '当前记录只保存在本浏览器中。要让所有大使共享，需要接入共享数据库。',
   },
 };
 
@@ -241,12 +249,12 @@ function renderShell(content) {
         <div class="sidebar-bottom">
           <div class="language-note"><span class="globe">◎</span><span>${t('language')}</span><button class="language-mini" data-language="${state.language === 'en' ? 'zh' : 'en'}">${t('bilingual')}</button></div>
           <button class="nav-item"><span class="nav-icon">⚙</span><span>${t('settings')}</span></button>
-          <div class="profile"><span class="avatar">S</span><div><strong>Shelly</strong><small>Lead · NYU</small></div><span class="more">•••</span></div>
+          <div class="profile"><span class="avatar">◎</span><div><strong>${t('sharedWorkspace')}</strong><small>${currentSchool().name} · All ambassadors</small></div></div>
         </div>
       </aside>
       <main class="main-content">
         <header class="topbar"><div class="mobile-brand"><span class="brand-mark">N</span><strong>${t('brand')}</strong></div><div class="top-actions"><span class="save-state">● ${t('saved')}</span><button class="icon-button" title="Notifications">♢<span class="notification-dot"></span></button><button class="language-toggle" data-language="${state.language === 'en' ? 'zh' : 'en'}">${state.language === 'en' ? '中文' : 'English'}</button></div></header>
-        <section class="page-wrap">${content}</section>
+        <section class="page-wrap"><div class="local-only-notice">◌ ${t('localOnlyNotice')}</div>${content}</section>
       </main>
       <div class="toast" id="toast"></div>
       <div id="modal-root"></div>
@@ -278,7 +286,7 @@ function metricCard(label, value, trend, icon, tone) {
 
 function activityRow(item) {
   const icon = item.kind === 'ugc' ? '▶' : item.kind === 'poster' ? '▤' : '↗';
-  return `<div class="activity-row"><span class="activity-icon ${item.kind}">${icon}</span><div class="activity-main"><strong>${item.name}</strong><span>${item.label}</span></div><div class="activity-meta"><span>${item.detail}</span><span>${dateLabel(item.date)}</span></div><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span></div>`;
+  return `<div class="activity-row"><span class="activity-icon ${item.kind}">${icon}</span><div class="activity-main"><strong>${item.name}</strong><span>${item.label}</span></div><div class="activity-meta"><span>${item.detail}</span><span>${dateLabel(item.date)}</span></div><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span><button class="delete-button" data-delete-record data-kind="${item.kind}" data-id="${item.id}" title="${t('delete')}">×</button></div>`;
 }
 
 function teamRow(person) {
@@ -290,9 +298,9 @@ function teamRow(person) {
 
 function tableView(view) {
   const config = {
-    work: { title: t('work'), subtitle: state.language === 'en' ? 'Log verified campus execution work.' : '记录可核验的校园执行工作。', data: state.data.works, columns: ['name', 'task', 'date', 'hours', 'status'] },
-    ugc: { title: t('ugc'), subtitle: state.language === 'en' ? 'Review drafts before anything goes live.' : '所有视频公开发布前必须完成审核。', data: state.data.ugc, columns: ['name', 'topic', 'platform', 'date', 'status'] },
-    posters: { title: t('posters'), subtitle: state.language === 'en' ? 'Track poster counts with photo proof.' : '记录张贴数量并附现场照片凭证。', data: state.data.posters, columns: ['name', 'location', 'count', 'date', 'status'] },
+    work: { title: t('work'), subtitle: state.language === 'en' ? 'Log verified campus execution work.' : '记录可核验的校园执行工作。', data: state.data.works, columns: ['name', 'task', 'date', 'hours', 'status', 'delete'] },
+    ugc: { title: t('ugc'), subtitle: state.language === 'en' ? 'Review drafts before anything goes live.' : '所有视频公开发布前必须完成审核。', data: state.data.ugc, columns: ['name', 'topic', 'platform', 'date', 'status', 'delete'] },
+    posters: { title: t('posters'), subtitle: state.language === 'en' ? 'Track poster counts with photo proof.' : '记录张贴数量并附现场照片凭证。', data: state.data.posters, columns: ['name', 'location', 'count', 'date', 'status', 'delete'] },
   }[view];
   const filtered = config.data.filter((item) => state.filter === 'All' || item.status === state.filter || (state.filter === 'Approved' && item.status === 'Officially Posted'));
   return `<div class="page-head"><div><p class="kicker">${t('thisWeek')} / 2026</p><h1>${config.title}</h1><p class="subhead">${config.subtitle}</p></div><div class="head-actions"><button class="button secondary" data-export>${t('export')} <span>↗</span></button><button class="button primary" data-add>${t('addRecord')} <span>＋</span></button></div></div>
@@ -301,12 +309,12 @@ function tableView(view) {
 }
 
 function tableHeading(column) {
-  return { name: t('name'), task: t('task'), topic: state.language === 'en' ? 'Video topic' : '视频主题', platform: t('platform'), location: t('location'), count: t('count'), date: t('date'), hours: t('hours'), amount: t('amount'), role: state.language === 'en' ? 'Role' : '角色', status: t('status') }[column];
+  return { name: t('name'), task: t('task'), topic: state.language === 'en' ? 'Video topic' : '视频主题', platform: t('platform'), location: t('location'), count: t('count'), date: t('date'), hours: t('hours'), amount: t('amount'), role: state.language === 'en' ? 'Role' : '角色', status: t('status'), delete: t('delete') }[column];
 }
 
 function tableRow(item, view) {
   const detail = view === 'work' ? item.task : view === 'ugc' ? item.topic : item.location;
-  return `<tr><td><div class="cell-person"><span class="avatar tiny">${item.name[0]}</span><strong>${item.name}</strong></div></td><td>${detail}</td>${view === 'ugc' ? `<td>${item.platform}</td>` : view === 'posters' ? `<td>${item.count}</td>` : ''}<td>${dateLabel(item.date)}</td>${view === 'work' ? `<td>${item.hours}h</td>` : ''}<td><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span></td></tr>`;
+  return `<tr><td><div class="cell-person"><span class="avatar tiny">${item.name[0]}</span><strong>${item.name}</strong></div></td><td>${detail}</td>${view === 'ugc' ? `<td>${item.platform}</td>` : view === 'posters' ? `<td>${item.count}</td>` : ''}<td>${dateLabel(item.date)}</td>${view === 'work' ? `<td>${item.hours}h</td>` : ''}<td><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span></td><td><button class="delete-button table-delete" data-delete-record data-kind="${view}" data-id="${item.id}">${t('delete')}</button></td></tr>`;
 }
 
 function emptyState() { return `<div class="empty-state"><span>✦</span><p>${t('noRecords')}</p></div>`; }
@@ -339,6 +347,15 @@ function saveRecord(event) {
 function closeModal() { document.querySelector('#modal-root').innerHTML = ''; }
 function showToast(message) { const toast = document.querySelector('#toast'); if (!toast) return; toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
 
+function deleteRecord(kind, id) {
+  if (!window.confirm(t('deleteConfirm'))) return;
+  const collection = kind === 'work' ? 'works' : kind === 'ugc' ? 'ugc' : kind === 'poster' || kind === 'posters' ? 'posters' : 'referrals';
+  state.data[collection] = state.data[collection].filter((item) => String(item.id) !== String(id));
+  persist();
+  render();
+  showToast(state.language === 'en' ? 'Record deleted' : '记录已删除');
+}
+
 function exportReport() {
   const rows = [
     ...state.data.works.map((item) => `${item.name},Weekly Work,${item.task},${item.date},${item.status}`),
@@ -357,6 +374,7 @@ function bindShellEvents() {
   document.querySelectorAll('[data-export]').forEach((element) => element.addEventListener('click', exportReport));
   document.querySelectorAll('[data-filter]').forEach((element) => element.addEventListener('click', () => { state.filter = element.dataset.filter; render(); }));
   document.querySelectorAll('[data-school-select]').forEach((element) => element.addEventListener('change', () => switchSchool(element.value)));
+  document.querySelectorAll('[data-delete-record]').forEach((element) => element.addEventListener('click', () => deleteRecord(element.dataset.kind, element.dataset.id)));
 }
 
 function render() { renderShell(state.activeView === 'overview' ? overviewView() : tableView(state.activeView)); }

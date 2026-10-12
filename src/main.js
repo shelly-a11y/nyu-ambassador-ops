@@ -90,6 +90,7 @@ const copy = {
     sharedWorkspace: 'Shared ambassador workspace',
     delete: 'Delete',
     deleteConfirm: 'Delete this record? This cannot be undone.',
+    notOwnerDelete: 'Only the submitter can delete this record in local mode.',
     localOnlyNotice: 'Records are currently saved in this browser only. Shared access needs a connected database.',
   },
   zh: {
@@ -159,6 +160,7 @@ const copy = {
     sharedWorkspace: '共享大使工作区',
     delete: '删除',
     deleteConfirm: '确定删除这条记录吗？删除后无法恢复。',
+    notOwnerDelete: '本地模式下只有提交人可以删除这条记录。',
     localOnlyNotice: '当前记录只保存在本浏览器中。要让所有大使共享，需要接入共享数据库。',
   },
 };
@@ -173,6 +175,8 @@ function loadWorkspace() {
 }
 
 const workspace = loadWorkspace();
+const localActorId = localStorage.getItem('nyu-local-actor-id') || crypto.randomUUID();
+localStorage.setItem('nyu-local-actor-id', localActorId);
 
 let state = {
   language: localStorage.getItem('nyu-language') || 'en',
@@ -286,7 +290,8 @@ function metricCard(label, value, trend, icon, tone) {
 
 function activityRow(item) {
   const icon = item.kind === 'ugc' ? '▶' : item.kind === 'poster' ? '▤' : '↗';
-  return `<div class="activity-row"><span class="activity-icon ${item.kind}">${icon}</span><div class="activity-main"><strong>${item.name}</strong><span>${item.label}</span></div><div class="activity-meta"><span>${item.detail}</span><span>${dateLabel(item.date)}</span></div><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span><button class="delete-button" data-delete-record data-kind="${item.kind}" data-id="${item.id}" title="${t('delete')}">×</button></div>`;
+  const deleteAction = canDelete(item) ? `<button class="delete-button" data-delete-record data-kind="${item.kind}" data-id="${item.id}" title="${t('delete')}">×</button>` : '';
+  return `<div class="activity-row"><span class="activity-icon ${item.kind}">${icon}</span><div class="activity-main"><strong>${item.name}</strong><span>${item.label}</span></div><div class="activity-meta"><span>${item.detail}</span><span>${dateLabel(item.date)}</span></div><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span>${deleteAction}</div>`;
 }
 
 function teamRow(person) {
@@ -314,7 +319,8 @@ function tableHeading(column) {
 
 function tableRow(item, view) {
   const detail = view === 'work' ? item.task : view === 'ugc' ? item.topic : item.location;
-  return `<tr><td><div class="cell-person"><span class="avatar tiny">${item.name[0]}</span><strong>${item.name}</strong></div></td><td>${detail}</td>${view === 'ugc' ? `<td>${item.platform}</td>` : view === 'posters' ? `<td>${item.count}</td>` : ''}<td>${dateLabel(item.date)}</td>${view === 'work' ? `<td>${item.hours}h</td>` : ''}<td><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span></td><td><button class="delete-button table-delete" data-delete-record data-kind="${view}" data-id="${item.id}">${t('delete')}</button></td></tr>`;
+  const deleteAction = canDelete(item) ? `<button class="delete-button table-delete" data-delete-record data-kind="${view}" data-id="${item.id}">${t('delete')}</button>` : '—';
+  return `<tr><td><div class="cell-person"><span class="avatar tiny">${item.name[0]}</span><strong>${item.name}</strong></div></td><td>${detail}</td>${view === 'ugc' ? `<td>${item.platform}</td>` : view === 'posters' ? `<td>${item.count}</td>` : ''}<td>${dateLabel(item.date)}</td>${view === 'work' ? `<td>${item.hours}h</td>` : ''}<td><span class="${statusClass(item.status)}">${localizedStatus(item.status)}</span></td><td>${deleteAction}</td></tr>`;
 }
 
 function emptyState() { return `<div class="empty-state"><span>✦</span><p>${t('noRecords')}</p></div>`; }
@@ -336,7 +342,7 @@ function renderDynamicFields() {
 function saveRecord(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target).entries());
-  const item = { id: Date.now(), ...data };
+  const item = { id: Date.now(), submittedBy: localActorId, ...data };
   if (data.type === 'work') state.data.works.push({ ...item, hours: Number(data.hours) });
   if (data.type === 'ugc') state.data.ugc.push({ ...item, hours: Number(data.hours) });
   if (data.type === 'posters') state.data.posters.push({ ...item, count: Number(data.count) });
@@ -347,9 +353,13 @@ function saveRecord(event) {
 function closeModal() { document.querySelector('#modal-root').innerHTML = ''; }
 function showToast(message) { const toast = document.querySelector('#toast'); if (!toast) return; toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
 
+function canDelete(item) { return item.submittedBy === localActorId; }
+
 function deleteRecord(kind, id) {
   if (!window.confirm(t('deleteConfirm'))) return;
   const collection = kind === 'work' ? 'works' : kind === 'ugc' ? 'ugc' : kind === 'poster' || kind === 'posters' ? 'posters' : 'referrals';
+  const item = state.data[collection].find((record) => String(record.id) === String(id));
+  if (!item || !canDelete(item)) { showToast(t('notOwnerDelete')); return; }
   state.data[collection] = state.data[collection].filter((item) => String(item.id) !== String(id));
   persist();
   render();

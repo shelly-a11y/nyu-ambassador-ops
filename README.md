@@ -9,7 +9,7 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-The app stores records in browser `localStorage`, so it is immediately usable as a local prototype without credentials or a backend.
+The app can run as a local prototype in browser `localStorage`, but shared multi-user mode requires the Supabase setup described below.
 
 ## Included flows
 
@@ -22,6 +22,6 @@ The app stores records in browser `localStorage`, so it is immediately usable as
 
 ## Current persistence boundary
 
-The current GitHub Pages version stores records in each browser's `localStorage`. The production shared-data design is prepared in `supabase/schema.sql`: authenticated profiles are assigned to one school, records carry `submitted_by` and `school_id`, and row-level security allows submitters to delete their own records while Lead/Admin users can manage records for their school.
+The current GitHub Pages version still stores records in each browser's `localStorage` because no Supabase project is configured. The production shared-data design in `supabase/schema.sql` includes the seven schools, the current NYU/Columbia/Barnard roster, authenticated profiles, `submitted_by`, `school_id`, and row-level security. Members can see records only in their own school, submit records for themselves, delete their own records, and Lead/Admin users can review, update, or delete records for their school.
 
-To activate the shared mode, apply `supabase/schema.sql` to a Supabase project and provide `VITE_SUPABASE_URL` plus `VITE_SUPABASE_ANON_KEY` to the deployment. Those provider credentials are intentionally not committed to this repository.
+The shared mode is not active yet. To activate it, apply `supabase/schema.sql` to a Supabase project, provision each user's `profiles` row, and provide `VITE_SUPABASE_URL` plus `VITE_SUPABASE_ANON_KEY` to the deployment. Those provider credentials are intentionally not committed to this repository. GitHub Pages alone cannot provide secure shared storage or identity authentication.

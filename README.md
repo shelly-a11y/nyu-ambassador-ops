@@ -22,4 +22,6 @@ The app stores records in browser `localStorage`, so it is immediately usable as
 
 ## Current persistence boundary
 
-Records are stored in each browser's `localStorage`. This means the current GitHub Pages version is not yet a shared multi-user database. A hosted database and access policy are required before records created by one ambassador can appear for everyone else.
+The current GitHub Pages version stores records in each browser's `localStorage`. The production shared-data design is prepared in `supabase/schema.sql`: authenticated profiles are assigned to one school, records carry `submitted_by` and `school_id`, and row-level security allows submitters to delete their own records while Lead/Admin users can manage records for their school.
+
+To activate the shared mode, apply `supabase/schema.sql` to a Supabase project and provide `VITE_SUPABASE_URL` plus `VITE_SUPABASE_ANON_KEY` to the deployment. Those provider credentials are intentionally not committed to this repository.

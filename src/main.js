@@ -1,5 +1,5 @@
 import './style.css';
-import { supabase, supabaseConfigured } from './supabase';
+import { authRedirectUrl, supabase, supabaseConfigured } from './supabase';
 
 const schools = {
   nyu: {
@@ -230,7 +230,7 @@ async function hydrateRemoteWorkspace() {
 async function signIn() {
   const email = window.prompt(state.language === 'en' ? 'Enter your email to receive a sign-in link:' : '输入邮箱以接收登录链接：');
   if (!email) return;
-  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: authRedirectUrl } });
   if (error) showToast(error.message);
   else showToast(state.language === 'en' ? 'Check your email for the sign-in link.' : '请检查邮箱中的登录链接。');
 }

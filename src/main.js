@@ -1,5 +1,5 @@
 import './style.css';
-import { authRedirectUrl, supabase, supabaseConfigured } from './supabase';
+import { supabase, supabaseConfigured } from './supabase';
 
 const app = document.querySelector('#app');
 
@@ -43,7 +43,7 @@ let state = {
   allowed: [],
   requests: [],
   notice: '',
-  cooldownUntil: 0,
+  authMode: 'signin',
 };
 
 const tr = (en, zh) => (state.language === 'zh' ? zh : en);
@@ -79,6 +79,10 @@ function showToast(message) {
 
 function friendlyError(error) {
   const message = error?.message || String(error);
+  if (/invalid login credentials/i.test(message)) return tr('Wrong email or password. New here? Choose "Create account".', '邮箱或密码错误。第一次使用请选择「注册账号」。');
+  if (/already registered|already been registered/i.test(message)) return tr('This email already has an account. Sign in instead.', '这个邮箱已经注册过，请直接登录。');
+  if (/password should be|weak password/i.test(message)) return tr('Password must be at least 8 characters.', '密码至少 8 位。');
+  if (/email not confirmed/i.test(message)) return tr('Email confirmation is still on in Supabase. Ask the admin to turn off "Confirm email".', 'Supabase 仍开启了邮箱确认，请管理员关闭「Confirm email」。');
   if (/rate limit/i.test(message)) return tr('Too many sign-in emails were requested. Please wait a few minutes and try again.', '登录邮件请求太频繁，请等几分钟后再试。');
   if (/row-level security|permission denied/i.test(message)) return tr('You do not have permission for this action.', '你没有执行该操作的权限。');
   if (/function .* does not exist|relation .* does not exist|schema cache/i.test(message)) return tr('Database upgrade is not installed yet. Ask the admin to run the latest migration.', '数据库升级脚本还没有运行，请管理员先运行最新的迁移 SQL。');
@@ -160,11 +164,13 @@ function authCard(body) {
 }
 
 function signedOutScreen() {
-  const waiting = Math.max(0, Math.ceil((state.cooldownUntil - Date.now()) / 1000));
-  return authCard(`<h1>${tr('Sign in with your email', '使用邮箱登录')}</h1><p class="subhead">${tr('We will email you a one-time sign-in link. New members are approved by the admin.', '我们会发送一封登录链接到你的邮箱。新成员需要管理员审批后才能使用。')}</p>
+  const signup = state.authMode === 'signup';
+  const tab = (mode, text) => `<button type="button" class="filter-pill ${state.authMode === mode ? 'selected' : ''}" data-action="auth-mode" data-mode="${mode}">${text}</button>`;
+  return authCard(`<h1>${signup ? tr('Create your account', '注册账号') : tr('Sign in', '登录')}</h1><p class="subhead">${tr('Use your email and a password. New members are approved by the admin.', '使用邮箱和密码登录。新成员需要管理员审批后才能使用。')}</p>
+    <div class="filter-pills auth-tabs">${tab('signin', tr('Sign in', '登录'))}${tab('signup', tr('Create account', '注册账号'))}</div>
     ${state.notice ? `<div class="local-only-notice">${esc(state.notice)}</div>` : ''}
-    <form data-form="sign-in" class="auth-form"><label>${tr('Email', '邮箱')}<input name="email" type="email" required autocomplete="email" placeholder="name@school.edu" /></label><button class="button primary full" type="submit" ${waiting ? 'disabled' : ''}>${waiting ? tr(`Resend in ${waiting}s`, `${waiting} 秒后可重发`) : tr('Send sign-in link', '发送登录链接')}</button></form>
-    <p class="hint">${tr('Only open the newest email. Links expire after one use.', '只点击最新的一封邮件，链接只能使用一次。')}</p>`);
+    <form data-form="auth" class="auth-form"><label>${tr('Email', '邮箱')}<input name="email" type="email" required autocomplete="email" placeholder="name@school.edu" /></label><label>${tr('Password', '密码')}<input name="password" type="password" required minlength="8" autocomplete="${signup ? 'new-password' : 'current-password'}" /></label>${signup ? `<label>${tr('Confirm password', '确认密码')}<input name="confirm" type="password" required minlength="8" autocomplete="new-password" /></label>` : ''}<button class="button primary full" type="submit">${signup ? tr('Create account', '注册') : tr('Sign in', '登录')}</button></form>
+    <p class="hint">${signup ? tr('At least 8 characters. Forgot it later? Ask the admin to reset your account.', '密码至少 8 位。忘记密码请联系管理员重置账号。') : tr('First time here? Choose "Create account".', '第一次使用请选择「注册账号」。')}</p>`);
 }
 
 function requestScreen() {
@@ -433,7 +439,7 @@ function adminView() {
   const inviteRows = invites.map((row) => `<tr><td>${esc(row.email)}</td><td>${esc(row.display_name)}</td><td>${esc(schoolName(row.school_id))}</td><td>${label(ROLES[row.role])}</td><td><button class="delete-button table-delete" data-action="revoke" data-email="${esc(row.email)}">${tr('Remove', '移除')}</button></td></tr>`).join('');
   return `${pageHead(tr('Members & approvals', '成员与审批'), tr('Only approved emails can submit and see school data.', '只有审批通过的邮箱才能提交和查看学校数据。'), '')}
     <section class="panel admin-section"><div class="panel-head"><div><h2>${tr('Pending requests', '待审批申请')}</h2><p>${tr('People who signed in and asked for access', '已登录并申请加入的成员')}</p></div></div><div class="table-wrap"><table><thead><tr><th>${tr('Email', '邮箱')}</th><th>${tr('Name', '姓名')}</th><th>${tr('School', '学校')}</th><th>${tr('Role', '角色')}</th><th>${tr('Note', '备注')}</th><th>${tr('Requested', '申请时间')}</th><th></th></tr></thead><tbody>${requests || `<tr><td colspan="7">${emptyState(tr('No pending requests.', '没有待审批的申请。'))}</td></tr>`}</tbody></table></div></section>
-    <section class="panel admin-section"><div class="panel-head"><div><h2>${tr('Pre-approve an email', '提前批准邮箱')}</h2><p>${tr('They can sign in directly without waiting.', '对方登录后直接进入，无需等待审批。')}</p></div></div><form data-form="invite" class="invite-form"><input name="email" type="email" required placeholder="name@school.edu" /><input name="display_name" required placeholder="${tr('Name', '姓名')}" /><select name="school_id">${schoolOptions(scope() === 'all' ? 'nyu' : scope())}</select><select name="role">${roleOptions('ambassador')}</select><button class="button primary" type="submit">${tr('Approve', '批准')}</button></form>${inviteRows ? `<div class="table-wrap"><table><thead><tr><th>${tr('Approved, not signed in yet', '已批准、尚未登录')}</th><th>${tr('Name', '姓名')}</th><th>${tr('School', '学校')}</th><th>${tr('Role', '角色')}</th><th></th></tr></thead><tbody>${inviteRows}</tbody></table></div>` : ''}</section>
+    <section class="panel admin-section"><div class="panel-head"><div><h2>${tr('Pre-approve an email', '提前批准邮箱')}</h2><p>${tr('They get access right after registering. Emails are not verified, so only pre-approve people you trust and tell them to register soon.', '对方注册后直接进入。系统不验证邮箱归属，只提前批准你信任的人，并让对方尽快注册。')}</p></div></div><form data-form="invite" class="invite-form"><input name="email" type="email" required placeholder="name@school.edu" /><input name="display_name" required placeholder="${tr('Name', '姓名')}" /><select name="school_id">${schoolOptions(scope() === 'all' ? 'nyu' : scope())}</select><select name="role">${roleOptions('ambassador')}</select><button class="button primary" type="submit">${tr('Approve', '批准')}</button></form>${inviteRows ? `<div class="table-wrap"><table><thead><tr><th>${tr('Approved, not signed in yet', '已批准、尚未登录')}</th><th>${tr('Name', '姓名')}</th><th>${tr('School', '学校')}</th><th>${tr('Role', '角色')}</th><th></th></tr></thead><tbody>${inviteRows}</tbody></table></div>` : ''}</section>
     <section class="panel admin-section"><div class="panel-head"><div><h2>${tr('Members', '成员')}</h2><p>${members.length} ${tr('members', '位成员')}</p></div></div><div class="table-wrap"><table><thead><tr><th>${tr('Email', '邮箱')}</th><th>${tr('Name', '姓名')}</th><th>${tr('School', '学校')}</th><th>${tr('Role', '角色')}</th><th></th></tr></thead><tbody>${memberRows || `<tr><td colspan="5">${emptyState(tr('No members yet.', '还没有成员。'))}</td></tr>`}</tbody></table></div></section>`;
 }
 
@@ -493,6 +499,7 @@ function render() {
 }
 
 const actions = {
+  'auth-mode': (el) => { state.authMode = el.dataset.mode; state.notice = ''; render(); },
   'language': () => { state.language = state.language === 'en' ? 'zh' : 'en'; render(); },
   'sign-out': async () => { await supabase.auth.signOut(); },
   'recheck': () => { state.phase = 'loading'; render(); boot(state.session); },
@@ -527,15 +534,17 @@ const changes = {
 };
 
 const forms = {
-  'sign-in': async (form) => {
-    const email = new FormData(form).get('email').trim();
-    form.querySelector('button').disabled = true;
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: authRedirectUrl } });
-    if (error) { state.notice = friendlyError(error); } else {
-      state.notice = tr(`Sign-in link sent to ${email}. Check your inbox (and spam).`, `登录链接已发送到 ${email}，请查收邮箱（包括垃圾邮件）。`);
-      state.cooldownUntil = Date.now() + 60000;
-      const tick = setInterval(() => { if (state.phase !== 'signed-out' || Date.now() > state.cooldownUntil) clearInterval(tick); if (state.phase === 'signed-out') render(); }, 1000);
-    }
+  'auth': async (form) => {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const email = data.email.trim().toLowerCase();
+    if (state.authMode === 'signup' && data.password !== data.confirm) { state.notice = tr('Passwords do not match.', '两次输入的密码不一致。'); return render(); }
+    form.querySelector('[type="submit"]').disabled = true;
+    const { data: result, error } = state.authMode === 'signup'
+      ? await supabase.auth.signUp({ email, password: data.password })
+      : await supabase.auth.signInWithPassword({ email, password: data.password });
+    if (error) state.notice = friendlyError(error);
+    else if (!result.session) state.notice = tr('Account created, but Supabase still requires email confirmation. Ask the admin to turn off "Confirm email".', '账号已创建，但 Supabase 仍要求邮箱确认。请管理员在 Supabase 关闭「Confirm email」。');
+    else state.notice = '';
     render();
   },
   'request': async (form) => {

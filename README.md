@@ -22,7 +22,7 @@ The app can run as a local prototype in browser `localStorage`, but shared multi
 
 ## Access model
 
-- Anyone can sign in with an email magic link, but only **approved** emails get a profile.
+- Members register with email + password (no emails are sent, so no Supabase email rate limit). Turn off **Confirm email** in Supabase Auth → Providers → Email. Only **approved** emails get a profile.
 - New users fill in name + school and wait; the admin approves them in **Members & approvals** (or pre-approves an email).
 - Ambassadors submit records and reimbursements as `pending`, see their school's records, and see only their own reimbursements.
 - Leads review records and reimbursements for their school; admins see and manage every school.
@@ -34,4 +34,4 @@ The app can run as a local prototype in browser `localStorage`, but shared multi
 1. Run `supabase/schema.sql` in the Supabase SQL Editor.
 2. Replace `YOUR_EMAIL@example.com` at the bottom of `supabase/migrations/002_approval_and_reimbursements.sql` with the admin email, then run it.
 3. Add GitHub secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (publishable key only) and rerun the Pages workflow.
-4. In Supabase Auth → URL Configuration, set the Site URL and a Redirect URL to the GitHub Pages address.
+4. In Supabase Auth → Sign In / Providers → Email, keep Email enabled and turn off **Confirm email**.

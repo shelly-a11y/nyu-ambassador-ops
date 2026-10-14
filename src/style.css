@@ -59,3 +59,4 @@ td.amount { color: var(--ink); font-weight: 700; white-space: nowrap; }
 .mobile-nav { border: 1px solid var(--line); background: white; border-radius: 7px; padding: 7px 8px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .activity-icon.referral { background: var(--mint); color: var(--mint-ink); }
 @media (max-width: 720px) { .top-actions .button.secondary:first-of-type { display: none; } .top-actions { gap: 8px; } }
+.auth-tabs { margin-top: 18px; }
